@@ -2,7 +2,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const { RoomManager, REVEAL_SECONDS } = require('./rooms');
+const { RoomManager, REVEAL_SECONDS, isGuessCorrect } = require('./rooms');
 
 const PORT = process.env.PORT || 3000;
 
@@ -164,16 +164,6 @@ io.on('connection', (socket) => {
     socket.to(room.code).emit('draw:stroke', stroke);
   });
 
-  socket.on('draw:clear', () => {
-    const meta = socketMeta.get(socket.id);
-    if (!meta) return;
-    const room = manager.getRoom(meta.roomCode);
-    if (!room || room.state !== 'drawing') return;
-    const drawer = room.currentDrawer();
-    if (!drawer || drawer.clientId !== meta.clientId) return;
-    socket.to(room.code).emit('draw:clear');
-  });
-
   socket.on('drawer:skip-word', () => {
     const meta = socketMeta.get(socket.id);
     if (!meta) return;
@@ -208,6 +198,37 @@ io.on('connection', (socket) => {
     }
     if (room.allEligibleGuessersDone()) {
       finishRoundAndScheduleNext(room, 'all-guessed');
+    }
+  });
+
+  socket.on('guess:submit', ({ text }) => {
+    const meta = socketMeta.get(socket.id);
+    if (!meta) return;
+    const room = manager.getRoom(meta.roomCode);
+    if (!room || room.state !== 'drawing') return;
+    const drawer = room.currentDrawer();
+    if (!drawer || drawer.clientId === meta.clientId) return;
+    const guesser = room.players.get(meta.clientId);
+    if (!guesser || room.correctClientIds.has(meta.clientId)) return;
+
+    const cleanText = (text || '').toString().trim().slice(0, 60);
+    if (!cleanText) return;
+
+    if (isGuessCorrect(cleanText, room.currentWord)) {
+      const result = room.awardCorrectGuess(meta.clientId);
+      if (result) {
+        io.to(room.code).emit('guess:correct', {
+          clientId: meta.clientId,
+          name: result.guesser.name,
+          points: result.points,
+        });
+        broadcastRoomState(room);
+      }
+      if (room.allEligibleGuessersDone()) {
+        finishRoundAndScheduleNext(room, 'all-guessed');
+      }
+    } else {
+      io.to(room.code).emit('guess:attempt', { clientId: meta.clientId, name: guesser.name, text: cleanText });
     }
   });
 
@@ -252,6 +273,23 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'gameover' || meta.clientId !== room.hostClientId) return;
     room.resetForPlayAgain();
     broadcastRoomState(room);
+  });
+
+  socket.on('player:leave', () => {
+    const meta = socketMeta.get(socket.id);
+    if (!meta) return;
+    socketMeta.delete(socket.id);
+    socket.leave(meta.roomCode);
+    const room = manager.getRoom(meta.roomCode);
+    if (!room) return;
+
+    const wasDrawer = room.state === 'drawing' && room.currentDrawer()?.clientId === meta.clientId;
+    room.removePlayer(meta.clientId);
+    room.ensureHost();
+    broadcastRoomState(room);
+
+    if (wasDrawer) finishRoundAndScheduleNext(room, 'drawer-left');
+    manager.removeRoomIfEmpty(room.code);
   });
 
   socket.on('disconnect', () => {

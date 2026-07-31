@@ -27,10 +27,16 @@
     drawTools: document.getElementById('draw-tools'),
     colorSwatches: document.getElementById('color-swatches'),
     brushSize: document.getElementById('brush-size'),
-    btnClear: document.getElementById('btn-clear'),
     btnSkip: document.getElementById('btn-skip'),
     btnEndRound: document.getElementById('btn-end-round'),
     gamePlayers: document.getElementById('game-players'),
+    guessBox: document.getElementById('guess-box'),
+    guessInput: document.getElementById('guess-input'),
+    btnGuess: document.getElementById('btn-guess'),
+    guessAlreadyCorrect: document.getElementById('guess-already-correct'),
+    guessFeed: document.getElementById('guess-feed'),
+
+    btnLeaveRoom: document.getElementById('btn-leave-room'),
 
     revealWord: document.getElementById('reveal-word'),
     revealCorrect: document.getElementById('reveal-correct'),
@@ -79,6 +85,7 @@
   function showScreen(name) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     document.getElementById(`screen-${name}`).classList.add('active');
+    els.btnLeaveRoom.classList.toggle('hidden', name === 'landing');
   }
 
   function saveSession(roomCode, name) {
@@ -132,6 +139,18 @@
       renderLobby();
     });
   })();
+
+  els.btnLeaveRoom.addEventListener('click', () => {
+    if (!confirm('Leave this room and go back to the start page?')) return;
+    socket.emit('player:leave');
+    clearSession();
+    room = null;
+    currentRound = null;
+    correctSet = new Set();
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    els.landingError.textContent = '';
+    showScreen('landing');
+  });
 
   // ---------- Lobby ----------
 
@@ -236,12 +255,6 @@
     els.colorSwatches.appendChild(btn);
   });
 
-  els.btnClear.addEventListener('click', () => {
-    if (!amIDrawing()) return;
-    resetCanvas();
-    socket.emit('draw:clear');
-  });
-
   els.btnSkip.addEventListener('click', () => {
     if (!amIDrawing()) return;
     socket.emit('drawer:skip-word');
@@ -251,6 +264,27 @@
     if (!amIDrawing()) return;
     socket.emit('drawer:end-round');
   });
+
+  function submitGuess() {
+    const text = els.guessInput.value.trim();
+    if (!text || amIDrawing() || correctSet.has(clientId)) return;
+    socket.emit('guess:submit', { text });
+    els.guessInput.value = '';
+  }
+
+  els.btnGuess.addEventListener('click', submitGuess);
+  els.guessInput.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Enter') submitGuess();
+  });
+
+  function addGuessFeedEntry(text, isCorrect) {
+    const li = document.createElement('li');
+    if (isCorrect) li.classList.add('correct');
+    li.textContent = text;
+    els.guessFeed.appendChild(li);
+    els.guessFeed.scrollTop = els.guessFeed.scrollHeight;
+    while (els.guessFeed.children.length > 30) els.guessFeed.removeChild(els.guessFeed.firstChild);
+  }
 
   // ---------- Game screen ----------
 
@@ -313,16 +347,21 @@
     els.roundLabel.textContent = `Round ${payload.roundNumber} / ${payload.totalRounds}`;
     startTimerLoop();
 
+    els.guessFeed.innerHTML = '';
+    els.guessInput.value = '';
+    els.guessAlreadyCorrect.classList.add('hidden');
+
     const iAmDrawer = amIDrawing();
     els.drawTools.classList.toggle('hidden', !iAmDrawer);
     els.wordShape.classList.toggle('hidden', iAmDrawer);
     els.yourWord.classList.toggle('hidden', true);
     els.yourWord.textContent = '';
+    els.guessBox.classList.toggle('hidden', iAmDrawer);
 
     if (iAmDrawer) {
       els.drawerBanner.textContent = "🎨 You're drawing — good luck!";
     } else {
-      els.drawerBanner.textContent = `🖊️ ${payload.drawerName} is drawing — shout your guesses out loud!`;
+      els.drawerBanner.textContent = `🖊️ ${payload.drawerName} is drawing — type your guess or shout it out!`;
       renderWordShape(payload.wordShape);
     }
     els.drawerBanner.classList.remove('hidden');
@@ -435,14 +474,27 @@
     resetCanvas();
   });
 
-  socket.on('guess:correct', ({ clientId: id }) => {
+  socket.on('guess:correct', ({ clientId: id, name }) => {
     correctSet.add(id);
     renderGamePlayers();
+    addGuessFeedEntry(`🎉 ${name} guessed it!`, true);
+    if (id === clientId) {
+      els.guessBox.classList.add('hidden');
+      els.guessAlreadyCorrect.classList.remove('hidden');
+    }
   });
 
   socket.on('guess:undo', ({ clientId: id }) => {
     correctSet.delete(id);
     renderGamePlayers();
+    if (id === clientId) {
+      els.guessBox.classList.remove('hidden');
+      els.guessAlreadyCorrect.classList.add('hidden');
+    }
+  });
+
+  socket.on('guess:attempt', ({ name, text }) => {
+    addGuessFeedEntry(`${name}: ${text}`, false);
   });
 
   socket.on('round:end', (payload) => {

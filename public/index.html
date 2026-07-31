@@ -3,17 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Baby Shower Pictionary 🍼</title>
+<title>Banch (B)irtual Baby Shower Pictionary 🍼</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+<button id="btn-leave-room" class="leave-btn hidden">🚪 Leave</button>
 
 <div class="app">
 
   <!-- LANDING -->
   <section id="screen-landing" class="screen active">
-    <h1>🍼 Baby Shower Pictionary 🎈</h1>
-    <p class="subtitle">Draw it. Say it out loud. Laugh at it.</p>
+    <h1>🍼 Banch (B)irtual Baby Shower Pictionary 🎈</h1>
+    <p class="subtitle">Draw it. Guess it. Laugh at it.</p>
 
     <div class="card">
       <h2>Start a new game</h2>
@@ -86,13 +88,20 @@
     <div id="draw-tools" class="draw-tools hidden">
       <div class="colors" id="color-swatches"></div>
       <input type="range" id="brush-size" min="2" max="24" value="6" />
-      <button id="btn-clear">Clear</button>
       <button id="btn-skip">🔀 New Word</button>
       <button id="btn-end-round" class="primary">✅ End Round</button>
     </div>
 
+    <div id="guess-box" class="guess-box hidden">
+      <input id="guess-input" maxlength="60" placeholder="Type your guess…" autocomplete="off" />
+      <button id="btn-guess" class="primary">Guess</button>
+    </div>
+    <p id="guess-already-correct" class="hint center hidden">✅ You got it! Waiting for others…</p>
+
+    <ul id="guess-feed" class="guess-feed"></ul>
+
     <div class="card">
-      <h2 id="score-panel-title">Say your guess out loud! Drawer taps your name when you're right.</h2>
+      <h2 id="score-panel-title">Type your guess above, or shout it out loud — first one right gets the most points!</h2>
       <ul id="game-players" class="player-list"></ul>
     </div>
   </section>

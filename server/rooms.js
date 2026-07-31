@@ -25,6 +25,55 @@ function shuffle(arr) {
   return a;
 }
 
+const STOPWORDS = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'at', 'is', 'was', 'are', 'were', 'to', 'and', 'with', 'for', 'my', 'your', 'his', 'her', 'their']);
+
+function normalizeText(str) {
+  return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function significantWords(str) {
+  return normalizeText(str).split(' ').filter((w) => w.length > 0 && !STOPWORDS.has(w));
+}
+
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const prev = new Array(n + 1);
+  const curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j <= n; j++) prev[j] = curr[j];
+  }
+  return prev[n];
+}
+
+// Forgiving guess check: exact match, typo tolerance, or majority keyword overlap
+// for multi-word prompts, since guessers are typing while also watching a drawing.
+function isGuessCorrect(guessRaw, wordRaw) {
+  const guess = normalizeText(guessRaw);
+  const word = normalizeText(wordRaw);
+  if (!guess) return false;
+  if (guess === word) return true;
+
+  const maxLen = Math.max(guess.length, word.length);
+  if (maxLen > 0 && levenshtein(guess, word) / maxLen <= 0.2) return true;
+
+  const wordKeywords = significantWords(wordRaw);
+  if (wordKeywords.length > 1) {
+    const guessWords = new Set(significantWords(guessRaw));
+    const matched = wordKeywords.filter((w) => guessWords.has(w)).length;
+    if (matched >= Math.ceil(wordKeywords.length * 0.6)) return true;
+  }
+  return false;
+}
+
 class Room {
   constructor(code) {
     this.code = code;
@@ -68,6 +117,10 @@ class Room {
     this.players.set(clientId, player);
     if (isHost) this.hostClientId = clientId;
     return player;
+  }
+
+  removePlayer(clientId) {
+    this.players.delete(clientId);
   }
 
   ensureHost() {
@@ -252,4 +305,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, DEFAULT_ROUND_SECONDS, REVEAL_SECONDS };
+module.exports = { RoomManager, DEFAULT_ROUND_SECONDS, REVEAL_SECONDS, isGuessCorrect };

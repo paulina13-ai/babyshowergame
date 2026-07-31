@@ -268,6 +268,53 @@ canvas {
   box-shadow: 0 0 0 3px var(--ink);
 }
 
+.leave-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  background: #ffffffee;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.guess-box {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.guess-box input {
+  flex: 1;
+}
+
+.guess-box button {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.guess-feed {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.guess-feed li {
+  padding: 6px 10px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  background: #ffffffaa;
+  font-size: 0.9rem;
+}
+
+.guess-feed li.correct {
+  background: var(--mint);
+  font-weight: 700;
+}
+
 .reveal-word {
   font-size: 1.8rem;
   font-weight: 800;
