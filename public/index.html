@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Baby Shower Pictionary 🍼</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- LANDING -->
+  <section id="screen-landing" class="screen active">
+    <h1>🍼 Baby Shower Pictionary 🎈</h1>
+    <p class="subtitle">Draw it. Say it out loud. Laugh at it.</p>
+
+    <div class="card">
+      <h2>Start a new game</h2>
+      <label>Your name</label>
+      <input id="create-name" maxlength="20" placeholder="e.g. Auntie Sam" />
+      <button id="btn-create" class="primary">Create Room</button>
+    </div>
+
+    <div class="card">
+      <h2>Join a game</h2>
+      <label>Room code</label>
+      <input id="join-code" maxlength="4" placeholder="ABCD" style="text-transform:uppercase" />
+      <label>Your name</label>
+      <input id="join-name" maxlength="20" placeholder="e.g. Uncle Joe" />
+      <button id="btn-join" class="primary">Join Room</button>
+    </div>
+
+    <p id="landing-error" class="error"></p>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="screen-lobby" class="screen">
+    <h1>Waiting for players&hellip;</h1>
+    <div class="room-code-box">
+      <div class="label">Room code</div>
+      <div id="lobby-code" class="room-code">ABCD</div>
+      <div class="hint">Everyone joins at this page and enters this code. Stay on the video call to talk!</div>
+    </div>
+
+    <div id="host-settings" class="card hidden">
+      <h2>Game settings</h2>
+      <label>Rounds per player</label>
+      <select id="setting-rounds">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+      </select>
+      <label>Seconds per round</label>
+      <select id="setting-seconds">
+        <option value="45">45</option>
+        <option value="60">60</option>
+        <option value="75" selected>75</option>
+        <option value="90">90</option>
+        <option value="120">120</option>
+      </select>
+      <button id="btn-start" class="primary" disabled>Start Game (need 2+ players)</button>
+    </div>
+
+    <div class="card">
+      <h2>Players</h2>
+      <ul id="lobby-players" class="player-list"></ul>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="screen-game" class="screen">
+    <div class="game-topbar">
+      <div id="round-label">Round 1 / 6</div>
+      <div id="timer" class="timer">75</div>
+    </div>
+
+    <div id="drawer-banner" class="banner hidden"></div>
+    <div id="word-shape" class="word-shape hidden"></div>
+    <div id="your-word" class="your-word hidden"></div>
+
+    <div class="canvas-wrap">
+      <canvas id="canvas" width="800" height="600"></canvas>
+    </div>
+
+    <div id="draw-tools" class="draw-tools hidden">
+      <div class="colors" id="color-swatches"></div>
+      <input type="range" id="brush-size" min="2" max="24" value="6" />
+      <button id="btn-clear">Clear</button>
+      <button id="btn-skip">🔀 New Word</button>
+      <button id="btn-end-round" class="primary">✅ End Round</button>
+    </div>
+
+    <div class="card">
+      <h2 id="score-panel-title">Say your guess out loud! Drawer taps your name when you're right.</h2>
+      <ul id="game-players" class="player-list"></ul>
+    </div>
+  </section>
+
+  <!-- REVEAL -->
+  <section id="screen-reveal" class="screen">
+    <h1>⏰ Round over!</h1>
+    <div class="card center">
+      <div class="label">The word was</div>
+      <div id="reveal-word" class="reveal-word">???</div>
+    </div>
+    <div class="card">
+      <h2>Who got it</h2>
+      <ul id="reveal-correct" class="player-list"></ul>
+    </div>
+    <div class="card">
+      <h2>Scoreboard</h2>
+      <ul id="reveal-scores" class="player-list"></ul>
+    </div>
+    <button id="btn-next-round" class="primary hidden">Continue Now</button>
+    <p id="reveal-auto-hint" class="hint center">Next round starting soon&hellip;</p>
+  </section>
+
+  <!-- GAME OVER -->
+  <section id="screen-gameover" class="screen">
+    <h1>🎉 Game Over! 🎉</h1>
+    <div id="winner-banner" class="banner"></div>
+    <div class="card">
+      <h2>Final Scores</h2>
+      <ul id="final-scores" class="player-list"></ul>
+    </div>
+    <button id="btn-play-again" class="primary hidden">Play Again</button>
+    <p id="gameover-hint" class="hint center hidden">Waiting for the host to start a new game&hellip;</p>
+  </section>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
