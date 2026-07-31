@@ -21,7 +21,6 @@
     roundLabel: document.getElementById('round-label'),
     timer: document.getElementById('timer'),
     drawerBanner: document.getElementById('drawer-banner'),
-    wordShape: document.getElementById('word-shape'),
     yourWord: document.getElementById('your-word'),
     canvas: document.getElementById('canvas'),
     drawTools: document.getElementById('draw-tools'),
@@ -48,6 +47,17 @@
     finalScores: document.getElementById('final-scores'),
     btnPlayAgain: document.getElementById('btn-play-again'),
     gameoverHint: document.getElementById('gameover-hint'),
+    crowdFavoriteCard: document.getElementById('crowd-favorite-card'),
+    crowdFavoriteImg: document.getElementById('crowd-favorite-img'),
+    crowdFavoriteCaption: document.getElementById('crowd-favorite-caption'),
+
+    votingTimer: document.getElementById('voting-timer'),
+    votingGallery: document.getElementById('voting-gallery'),
+    voteProgress: document.getElementById('vote-progress'),
+    btnRevealWinner: document.getElementById('btn-reveal-winner'),
+    votingAutoHint: document.getElementById('voting-auto-hint'),
+
+    winSplash: document.getElementById('win-splash'),
   };
 
   const ctx = els.canvas.getContext('2d');
@@ -66,13 +76,16 @@
   const clientId = getClientId();
 
   let room = null; // last known public room state
-  let currentRound = null; // { drawerClientId, drawerName, roundNumber, totalRounds, endsAt, roundSeconds, wordShape }
+  let currentRound = null; // { drawerClientId, drawerName, roundNumber, totalRounds, endsAt, roundSeconds }
   let correctSet = new Set();
   let timerInterval = null;
   let currentColor = COLORS[0];
   let currentWidth = Number(els.brushSize.value);
   let drawing = false;
   let lastPoint = null;
+  let votingTimerInterval = null;
+  let votingEndsAt = null;
+  let myVoteIndex = null;
 
   function isHostMe() {
     return !!room && room.hostClientId === clientId;
@@ -222,6 +235,15 @@
     return !!currentRound && currentRound.drawerClientId === clientId;
   }
 
+  function sendRoundSnapshot() {
+    const snap = document.createElement('canvas');
+    snap.width = 400;
+    snap.height = 300;
+    snap.getContext('2d').drawImage(els.canvas, 0, 0, snap.width, snap.height);
+    const dataUrl = snap.toDataURL('image/jpeg', 0.8);
+    socket.emit('round:snapshot', { dataUrl });
+  }
+
   els.canvas.addEventListener('pointerdown', (evt) => {
     if (!amIDrawing()) return;
     drawing = true;
@@ -306,14 +328,9 @@
     }
   }
 
-  function renderWordShape(shape) {
-    els.wordShape.textContent = shape.map((len) => '_'.repeat(len)).join('   ');
-  }
-
   function renderGamePlayers() {
     if (!room || !currentRound) return;
     els.gamePlayers.innerHTML = '';
-    const iAmDrawer = amIDrawing();
     room.players.forEach((p) => {
       const li = document.createElement('li');
       if (p.isHost) li.classList.add('host');
@@ -324,17 +341,6 @@
 
       const nameLabel = isDrawerPlayer ? `🎨 ${escapeHtml(p.name)}` : escapeHtml(p.name);
       li.innerHTML = `<span>${nameLabel}${isCorrect ? ' ✅' : ''}</span><span class="score">${p.score}</span>`;
-
-      if (iAmDrawer && !isDrawerPlayer && p.connected) {
-        li.classList.add('tappable');
-        li.addEventListener('click', () => {
-          if (correctSet.has(p.clientId)) {
-            socket.emit('drawer:undo-correct', { clientId: p.clientId });
-          } else {
-            socket.emit('drawer:correct', { clientId: p.clientId });
-          }
-        });
-      }
       els.gamePlayers.appendChild(li);
     });
   }
@@ -353,7 +359,6 @@
 
     const iAmDrawer = amIDrawing();
     els.drawTools.classList.toggle('hidden', !iAmDrawer);
-    els.wordShape.classList.toggle('hidden', iAmDrawer);
     els.yourWord.classList.toggle('hidden', true);
     els.yourWord.textContent = '';
     els.guessBox.classList.toggle('hidden', iAmDrawer);
@@ -361,8 +366,7 @@
     if (iAmDrawer) {
       els.drawerBanner.textContent = "🎨 You're drawing — good luck!";
     } else {
-      els.drawerBanner.textContent = `🖊️ ${payload.drawerName} is drawing — type your guess or shout it out!`;
-      renderWordShape(payload.wordShape);
+      els.drawerBanner.textContent = `🖊️ ${payload.drawerName} is drawing — type your guess below!`;
     }
     els.drawerBanner.classList.remove('hidden');
     renderGamePlayers();
@@ -403,12 +407,103 @@
     const amHost = isHostMe();
     els.btnNextRound.classList.toggle('hidden', !amHost);
     els.revealAutoHint.classList.toggle('hidden', amHost);
+    const isLastRound = currentRound && currentRound.roundNumber >= currentRound.totalRounds;
+    els.revealAutoHint.textContent = isLastRound
+      ? 'Moving to the favorite-drawing vote soon…'
+      : 'Next round starting soon…';
   }
 
   els.btnNextRound.addEventListener('click', () => {
     if (!isHostMe()) return;
     socket.emit('host:next-round');
   });
+
+  // ---------- Voting ----------
+
+  function renderVoting(payload) {
+    showScreen('voting');
+    myVoteIndex = null;
+    votingEndsAt = payload.endsAt;
+    els.votingGallery.innerHTML = '';
+
+    if (payload.drawings.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'hint center';
+      p.textContent = "You didn't draw anything this round, so there's nothing for you to vote on — hang tight!";
+      els.votingGallery.appendChild(p);
+    }
+
+    payload.drawings.forEach((d) => {
+      const card = document.createElement('div');
+      card.className = 'drawing-card';
+      const img = document.createElement('img');
+      img.src = d.dataUrl;
+      img.alt = `A drawing for "${d.word}"`;
+      const caption = document.createElement('div');
+      caption.className = 'drawing-prompt';
+      caption.textContent = d.word;
+      card.appendChild(img);
+      card.appendChild(caption);
+      card.addEventListener('click', () => {
+        myVoteIndex = d.index;
+        document.querySelectorAll('.drawing-card').forEach((c) => c.classList.remove('selected'));
+        card.classList.add('selected');
+        socket.emit('vote:submit', { index: d.index });
+      });
+      els.votingGallery.appendChild(card);
+    });
+
+    els.voteProgress.textContent = '0 votes in so far';
+    if (votingTimerInterval) clearInterval(votingTimerInterval);
+    votingTimerInterval = setInterval(updateVotingTimerDisplay, 250);
+    updateVotingTimerDisplay();
+
+    const amHost = isHostMe();
+    els.btnRevealWinner.classList.toggle('hidden', !amHost);
+    els.votingAutoHint.classList.toggle('hidden', amHost);
+  }
+
+  function updateVotingTimerDisplay() {
+    if (!votingEndsAt) return;
+    const seconds = Math.max(0, Math.ceil((votingEndsAt - Date.now()) / 1000));
+    els.votingTimer.textContent = String(seconds);
+    els.votingTimer.classList.toggle('low', seconds <= 10);
+    if (seconds <= 0 && votingTimerInterval) {
+      clearInterval(votingTimerInterval);
+      votingTimerInterval = null;
+    }
+  }
+
+  els.btnRevealWinner.addEventListener('click', () => {
+    if (!isHostMe()) return;
+    socket.emit('host:reveal-winner');
+  });
+
+  function triggerWinSplash() {
+    const EMOJIS = ['🍼', '🧷', '👶', '🚼'];
+    els.winSplash.innerHTML = '';
+    els.winSplash.classList.remove('hidden');
+
+    const banner = document.createElement('div');
+    banner.className = 'win-banner';
+    banner.textContent = '🏆 Your drawing won Crowd Favorite! 🏆';
+    els.winSplash.appendChild(banner);
+
+    for (let i = 0; i < 50; i++) {
+      const span = document.createElement('span');
+      span.className = 'emoji-fall';
+      span.textContent = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+      span.style.left = `${Math.random() * 100}%`;
+      span.style.animationDuration = `${3 + Math.random() * 3}s`;
+      span.style.animationDelay = `${Math.random() * 1.2}s`;
+      els.winSplash.appendChild(span);
+    }
+
+    setTimeout(() => {
+      els.winSplash.classList.add('hidden');
+      els.winSplash.innerHTML = '';
+    }, 7000);
+  }
 
   // ---------- Game over ----------
 
@@ -430,6 +525,16 @@
     } else {
       els.winnerBanner.textContent = '';
     }
+
+    const contest = payload.drawingContest;
+    els.crowdFavoriteCard.classList.toggle('hidden', !contest);
+    if (contest) {
+      els.crowdFavoriteImg.src = contest.dataUrl;
+      const voteWord = contest.tied ? 'tied for the most votes' : `won with ${contest.votes} vote${contest.votes === 1 ? '' : 's'}`;
+      els.crowdFavoriteCaption.textContent = `${contest.drawerName}'s drawing of "${contest.word}" ${voteWord}!`;
+      if (contest.drawerClientId === clientId) triggerWinSplash();
+    }
+
     const amHost = isHostMe();
     els.btnPlayAgain.classList.toggle('hidden', !amHost);
     els.gameoverHint.classList.toggle('hidden', amHost);
@@ -461,11 +566,6 @@
     els.yourWord.classList.remove('hidden');
   });
 
-  socket.on('round:word-shape', ({ wordShape }) => {
-    if (currentRound) currentRound.wordShape = wordShape;
-    if (!amIDrawing()) renderWordShape(wordShape);
-  });
-
   socket.on('draw:stroke', (stroke) => {
     drawSegment({ x: stroke.x0, y: stroke.y0 }, { x: stroke.x1, y: stroke.y1 }, stroke.color, stroke.width);
   });
@@ -484,25 +584,27 @@
     }
   });
 
-  socket.on('guess:undo', ({ clientId: id }) => {
-    correctSet.delete(id);
-    renderGamePlayers();
-    if (id === clientId) {
-      els.guessBox.classList.remove('hidden');
-      els.guessAlreadyCorrect.classList.add('hidden');
-    }
-  });
-
   socket.on('guess:attempt', ({ name, text }) => {
     addGuessFeedEntry(`${name}: ${text}`, false);
   });
 
   socket.on('round:end', (payload) => {
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    if (amIDrawing()) sendRoundSnapshot();
     renderReveal(payload);
   });
 
+  socket.on('voting:start', (payload) => {
+    if (votingTimerInterval) { clearInterval(votingTimerInterval); votingTimerInterval = null; }
+    renderVoting(payload);
+  });
+
+  socket.on('vote:progress', ({ votedCount, totalEligible }) => {
+    els.voteProgress.textContent = `${votedCount} of ${totalEligible} have voted`;
+  });
+
   socket.on('game:end', (payload) => {
+    if (votingTimerInterval) { clearInterval(votingTimerInterval); votingTimerInterval = null; }
     clearSession();
     renderGameOver(payload);
   });

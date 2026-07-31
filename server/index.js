@@ -2,7 +2,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const { RoomManager, REVEAL_SECONDS, isGuessCorrect } = require('./rooms');
+const { RoomManager, REVEAL_SECONDS, VOTING_SECONDS, isGuessCorrect } = require('./rooms');
 
 const PORT = process.env.PORT || 3000;
 
@@ -34,7 +34,6 @@ function roundStartPayload(room, drawer) {
     totalRounds: room.totalRounds,
     endsAt: room.roundEndsAt,
     roundSeconds: room.roundSeconds,
-    wordShape: room.wordShape,
   };
 }
 
@@ -62,17 +61,45 @@ function finishRoundAndScheduleNext(room, reason) {
   io.to(room.code).emit('round:end', { ...summary, reason });
 
   if (room.isGameOver()) {
-    room.revealTimer = setTimeout(() => endGame(room), REVEAL_SECONDS * 1000);
+    room.revealTimer = setTimeout(() => startVotingPhase(room), REVEAL_SECONDS * 1000);
   } else {
     room.revealTimer = setTimeout(() => launchRound(room), REVEAL_SECONDS * 1000);
   }
 }
 
-function endGame(room) {
+function startVotingPhase(room) {
+  room.clearTimers();
+  if (!room.canStartVoting()) {
+    endGame(room);
+    return;
+  }
+  room.startVoting();
+  broadcastRoomState(room);
+  const endsAt = Date.now() + VOTING_SECONDS * 1000;
+  for (const player of room.connectedPlayers) {
+    const s = socketForClient(room, player.clientId);
+    if (s) {
+      s.emit('voting:start', {
+        drawings: room.votingGalleryForClient(player.clientId),
+        votingSeconds: VOTING_SECONDS,
+        endsAt,
+      });
+    }
+  }
+  room.timer = setTimeout(() => revealWinnerAndEndGame(room), VOTING_SECONDS * 1000);
+}
+
+function revealWinnerAndEndGame(room) {
+  if (room.timer) clearTimeout(room.timer);
+  room.timer = null;
+  endGame(room, room.tallyDrawingContest());
+}
+
+function endGame(room, drawingContest = null) {
   room.clearTimers();
   room.state = 'gameover';
   broadcastRoomState(room);
-  io.to(room.code).emit('game:end', { finalScores: room.finalScores() });
+  io.to(room.code).emit('game:end', { finalScores: room.finalScores(), drawingContest });
 }
 
 io.on('connection', (socket) => {
@@ -173,32 +200,7 @@ io.on('connection', (socket) => {
     if (!drawer || drawer.clientId !== meta.clientId) return;
     room.skipUsedThisRound = true;
     room.currentWord = room.pickWord();
-    room.wordShape = room.wordShapeFor(room.currentWord);
-    io.to(room.code).emit('round:word-shape', { wordShape: room.wordShape });
     socket.emit('round:word', { word: room.currentWord });
-  });
-
-  socket.on('drawer:correct', ({ clientId }) => {
-    const meta = socketMeta.get(socket.id);
-    if (!meta) return;
-    const room = manager.getRoom(meta.roomCode);
-    if (!room || room.state !== 'drawing') return;
-    const drawer = room.currentDrawer();
-    if (!drawer || drawer.clientId !== meta.clientId) return;
-    if (clientId === drawer.clientId) return;
-
-    const result = room.awardCorrectGuess(clientId);
-    if (result) {
-      io.to(room.code).emit('guess:correct', {
-        clientId,
-        name: result.guesser.name,
-        points: result.points,
-      });
-      broadcastRoomState(room);
-    }
-    if (room.allEligibleGuessersDone()) {
-      finishRoundAndScheduleNext(room, 'all-guessed');
-    }
   });
 
   socket.on('guess:submit', ({ text }) => {
@@ -232,19 +234,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('drawer:undo-correct', ({ clientId }) => {
-    const meta = socketMeta.get(socket.id);
-    if (!meta) return;
-    const room = manager.getRoom(meta.roomCode);
-    if (!room || room.state !== 'drawing') return;
-    const drawer = room.currentDrawer();
-    if (!drawer || drawer.clientId !== meta.clientId) return;
-    if (room.undoCorrectGuess(clientId)) {
-      io.to(room.code).emit('guess:undo', { clientId });
-      broadcastRoomState(room);
-    }
-  });
-
   socket.on('drawer:end-round', () => {
     const meta = socketMeta.get(socket.id);
     if (!meta) return;
@@ -262,8 +251,40 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'reveal' || meta.clientId !== room.hostClientId) return;
     if (room.revealTimer) clearTimeout(room.revealTimer);
     room.revealTimer = null;
-    if (room.isGameOver()) endGame(room);
+    if (room.isGameOver()) startVotingPhase(room);
     else launchRound(room);
+  });
+
+  socket.on('host:reveal-winner', () => {
+    const meta = socketMeta.get(socket.id);
+    if (!meta) return;
+    const room = manager.getRoom(meta.roomCode);
+    if (!room || room.state !== 'voting' || meta.clientId !== room.hostClientId) return;
+    revealWinnerAndEndGame(room);
+  });
+
+  socket.on('vote:submit', ({ index }) => {
+    const meta = socketMeta.get(socket.id);
+    if (!meta) return;
+    const room = manager.getRoom(meta.roomCode);
+    if (!room || room.state !== 'voting') return;
+    if (room.castVote(meta.clientId, index)) {
+      io.to(room.code).emit('vote:progress', {
+        votedCount: room.votes.size,
+        totalEligible: room.connectedPlayers.length,
+      });
+    }
+  });
+
+  socket.on('round:snapshot', ({ dataUrl }) => {
+    const meta = socketMeta.get(socket.id);
+    if (!meta) return;
+    const room = manager.getRoom(meta.roomCode);
+    if (!room || room.state !== 'reveal') return;
+    const drawer = room.currentDrawer();
+    if (!drawer || drawer.clientId !== meta.clientId) return;
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/') || dataUrl.length > 500_000) return;
+    room.addDrawing(room.roundNumber, drawer.clientId, drawer.name, room.currentWord, dataUrl);
   });
 
   socket.on('host:play-again', () => {

@@ -78,7 +78,6 @@
     </div>
 
     <div id="drawer-banner" class="banner hidden"></div>
-    <div id="word-shape" class="word-shape hidden"></div>
     <div id="your-word" class="your-word hidden"></div>
 
     <div class="canvas-wrap">
@@ -101,7 +100,7 @@
     <ul id="guess-feed" class="guess-feed"></ul>
 
     <div class="card">
-      <h2 id="score-panel-title">Type your guess above, or shout it out loud — first one right gets the most points!</h2>
+      <h2 id="score-panel-title">Scoreboard</h2>
       <ul id="game-players" class="player-list"></ul>
     </div>
   </section>
@@ -125,6 +124,21 @@
     <p id="reveal-auto-hint" class="hint center">Next round starting soon&hellip;</p>
   </section>
 
+  <!-- VOTING -->
+  <section id="screen-voting" class="screen">
+    <div class="game-topbar">
+      <h1 style="margin:0">🖼️ Vote for your favorite!</h1>
+      <div id="voting-timer" class="timer">30</div>
+    </div>
+    <p class="hint center">Artist names are hidden — judge the art, not the artist. (You won't see your own drawing here.)</p>
+
+    <div id="voting-gallery" class="voting-gallery"></div>
+
+    <p id="vote-progress" class="hint center">0 of 0 have voted</p>
+    <button id="btn-reveal-winner" class="primary hidden">Reveal Winner Now</button>
+    <p id="voting-auto-hint" class="hint center">Winner reveal coming up soon&hellip;</p>
+  </section>
+
   <!-- GAME OVER -->
   <section id="screen-gameover" class="screen">
     <h1>🎉 Game Over! 🎉</h1>
@@ -133,11 +147,20 @@
       <h2>Final Scores</h2>
       <ul id="final-scores" class="player-list"></ul>
     </div>
+
+    <div id="crowd-favorite-card" class="card center hidden">
+      <h2>🏆 Crowd Favorite Drawing</h2>
+      <img id="crowd-favorite-img" class="crowd-favorite-img" alt="Winning drawing" />
+      <div id="crowd-favorite-caption" class="hint"></div>
+    </div>
+
     <button id="btn-play-again" class="primary hidden">Play Again</button>
     <p id="gameover-hint" class="hint center hidden">Waiting for the host to start a new game&hellip;</p>
   </section>
 
 </div>
+
+<div id="win-splash" class="win-splash hidden"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="client.js"></script>

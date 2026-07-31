@@ -4,6 +4,8 @@ const PROMPTS = require('./prompts');
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I, O, 0, 1
 const DEFAULT_ROUND_SECONDS = 75;
 const REVEAL_SECONDS = 6;
+const VOTING_SECONDS = 30;
+const MIN_DRAWINGS_TO_VOTE = 2;
 const CORRECT_GUESS_MIN_POINTS = 40;
 const CORRECT_GUESS_MAX_POINTS = 100;
 const DRAWER_BONUS_PER_GUESSER = 15;
@@ -79,7 +81,7 @@ class Room {
     this.code = code;
     this.players = new Map(); // clientId -> { clientId, name, score, connected, socketId, isHost }
     this.hostClientId = null;
-    this.state = 'lobby'; // lobby | drawing | reveal | gameover
+    this.state = 'lobby'; // lobby | drawing | reveal | voting | gameover
     this.roundsPerPlayer = 1;
     this.roundSeconds = DEFAULT_ROUND_SECONDS;
     this.order = [];
@@ -88,13 +90,14 @@ class Room {
     this.totalRounds = 0;
     this.usedPrompts = new Set();
     this.currentWord = null;
-    this.wordShape = null;
     this.roundEndsAt = null;
     this.correctClientIds = new Set();
     this.correctLog = [];
     this.skipUsedThisRound = false;
     this.timer = null;
     this.revealTimer = null;
+    this.drawings = []; // { roundNumber, drawerClientId, drawerName, word, dataUrl }
+    this.votes = new Map(); // voterClientId -> drawingIndex
   }
 
   get connectedPlayers() {
@@ -169,10 +172,6 @@ class Room {
     return word;
   }
 
-  wordShapeFor(word) {
-    return word.split(' ').map((w) => w.length);
-  }
-
   clearTimers() {
     if (this.timer) clearTimeout(this.timer);
     if (this.revealTimer) clearTimeout(this.revealTimer);
@@ -204,7 +203,6 @@ class Room {
     this.roundNumber += 1;
     this.state = 'drawing';
     this.currentWord = this.pickWord();
-    this.wordShape = this.wordShapeFor(this.currentWord);
     this.roundEndsAt = Date.now() + this.roundSeconds * 1000;
     this.correctClientIds = new Set();
     this.correctLog = [];
@@ -223,16 +221,6 @@ class Room {
     this.correctClientIds.add(clientId);
     this.correctLog.push({ clientId, name: guesser.name, points });
     return { points, guesser };
-  }
-
-  undoCorrectGuess(clientId) {
-    if (!this.correctClientIds.has(clientId)) return false;
-    const guesser = this.players.get(clientId);
-    const entry = this.correctLog.find((e) => e.clientId === clientId);
-    if (guesser && entry) guesser.score = Math.max(0, guesser.score - entry.points);
-    this.correctClientIds.delete(clientId);
-    this.correctLog = this.correctLog.filter((e) => e.clientId !== clientId);
-    return true;
   }
 
   allEligibleGuessersDone() {
@@ -257,6 +245,63 @@ class Room {
     return this.roundNumber >= this.totalRounds || this.connectedPlayers.length < 2;
   }
 
+  addDrawing(roundNumber, drawerClientId, drawerName, word, dataUrl) {
+    const existingIdx = this.drawings.findIndex((d) => d.roundNumber === roundNumber);
+    const entry = { roundNumber, drawerClientId, drawerName, word, dataUrl };
+    if (existingIdx >= 0) this.drawings[existingIdx] = entry;
+    else this.drawings.push(entry);
+  }
+
+  canStartVoting() {
+    return this.drawings.length >= MIN_DRAWINGS_TO_VOTE;
+  }
+
+  startVoting() {
+    this.state = 'voting';
+    this.votes = new Map();
+  }
+
+  castVote(voterClientId, index) {
+    const drawing = this.drawings[index];
+    if (!drawing) return false;
+    if (drawing.drawerClientId === voterClientId) return false;
+    if (!this.players.has(voterClientId)) return false;
+    this.votes.set(voterClientId, index);
+    return true;
+  }
+
+  // Drawer identity is withheld so voting is judged on the art, not the artist;
+  // a viewer's own drawings are excluded so they can't accidentally vote for themselves.
+  votingGalleryForClient(viewerClientId) {
+    return this.drawings
+      .filter((d) => d.drawerClientId !== viewerClientId)
+      .map((d) => ({ index: this.drawings.indexOf(d), word: d.word, dataUrl: d.dataUrl }));
+  }
+
+  tallyDrawingContest() {
+    if (this.drawings.length === 0) return null;
+    const counts = new Map();
+    for (const idx of this.votes.values()) counts.set(idx, (counts.get(idx) || 0) + 1);
+    let winners = [];
+    let topCount = 0;
+    this.drawings.forEach((d, i) => {
+      const count = counts.get(i) || 0;
+      if (count > topCount) { topCount = count; winners = [i]; }
+      else if (count === topCount && topCount > 0) winners.push(i);
+    });
+    if (winners.length === 0) return null;
+    const winnerIndex = winners[crypto.randomInt(winners.length)];
+    const winner = this.drawings[winnerIndex];
+    return {
+      drawerClientId: winner.drawerClientId,
+      drawerName: winner.drawerName,
+      word: winner.word,
+      dataUrl: winner.dataUrl,
+      votes: topCount,
+      tied: winners.length > 1,
+    };
+  }
+
   finalScores() {
     return [...this.players.values()]
       .map((p) => ({ clientId: p.clientId, name: p.name, score: p.score }))
@@ -272,10 +317,11 @@ class Room {
     this.totalRounds = 0;
     this.usedPrompts.clear();
     this.currentWord = null;
-    this.wordShape = null;
     this.roundEndsAt = null;
     this.correctClientIds = new Set();
     this.correctLog = [];
+    this.drawings = [];
+    this.votes = new Map();
     for (const p of this.players.values()) p.score = 0;
   }
 }
@@ -305,4 +351,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, DEFAULT_ROUND_SECONDS, REVEAL_SECONDS, isGuessCorrect };
+module.exports = { RoomManager, DEFAULT_ROUND_SECONDS, REVEAL_SECONDS, VOTING_SECONDS, isGuessCorrect };

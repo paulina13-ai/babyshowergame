@@ -3,7 +3,7 @@
 A silly, collaborative drawing game built for a baby shower video call. Everyone
 joins from their own phone/laptop with a room code (Jackbox-style) — one person
 draws a silly baby-themed prompt while everyone else watches the canvas update
-live and types (or shouts) their guesses. First one right wins the points.
+live and types their guess. First correct guess wins the most points.
 
 ## How it works
 
@@ -19,10 +19,13 @@ live and types (or shouts) their guesses. First one right wins the points.
   the canvas update in real time.
 - Guessers **type their guess** in a box on their screen (typos and close
   wording are forgiven) — first correct guess scores the most points, with
-  fewer points the longer it takes. Shouting it out on the call still works
-  too: the drawer can manually tap a player's name to award them credit.
-- The drawer also earns a bonus for every correct guesser.
-- After everyone's had a turn, the final scoreboard decides the winner.
+  fewer points the longer it takes. The drawer also earns a bonus for every
+  correct guesser.
+- After everyone's had a turn, players **vote for their favorite drawing**
+  from the round (artist identities are hidden until the vote closes, and you
+  never see your own drawing in your ballot). Whoever wins gets a full-screen
+  splash of diapers and baby bottles as a reward.
+- The final scoreboard (plus the crowd-favorite drawing) decides the winners.
 
 ## Running it locally
 

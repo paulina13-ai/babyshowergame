@@ -162,12 +162,6 @@ button:active { transform: translateY(1px); }
 .player-list li.correct { background: var(--mint); }
 .player-list li .score { opacity: 0.7; font-weight: 700; }
 
-.player-list li.tappable {
-  cursor: pointer;
-  border: 2px dashed #d9b8ff;
-}
-.player-list li.tappable:active { transform: scale(0.98); }
-
 .game-topbar {
   display: flex;
   justify-content: space-between;
@@ -201,14 +195,6 @@ button:active { transform: translateY(1px); }
   background: var(--card-bg);
   border-radius: 12px;
   padding: 10px;
-  margin-bottom: 8px;
-}
-
-.word-shape {
-  text-align: center;
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
   margin-bottom: 8px;
 }
 
@@ -281,16 +267,19 @@ canvas {
 
 .guess-box {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin: 10px 0;
 }
 
 .guess-box input {
-  flex: 1;
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 14px;
 }
 
 .guess-box button {
-  flex: 0 0 auto;
+  width: 100%;
   margin-top: 0;
 }
 
@@ -313,6 +302,91 @@ canvas {
 .guess-feed li.correct {
   background: var(--mint);
   font-weight: 700;
+}
+
+.voting-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.drawing-card {
+  background: white;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 3px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.drawing-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.drawing-card .drawing-prompt {
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.drawing-card.selected {
+  border-color: #ff77b6;
+  box-shadow: 0 0 0 3px #ffd0e6;
+}
+
+.crowd-favorite-img {
+  max-width: 100%;
+  border-radius: 14px;
+  margin: 8px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.win-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.win-splash .win-banner {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.8rem;
+  font-weight: 800;
+  text-align: center;
+  background: #ffffffee;
+  color: #b0004b;
+  padding: 16px 24px;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  animation: pop-in 0.4s ease;
+}
+
+.win-splash .emoji-fall {
+  position: absolute;
+  top: -60px;
+  font-size: 2.2rem;
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fall {
+  to { transform: translateY(115vh) rotate(360deg); }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 .reveal-word {
