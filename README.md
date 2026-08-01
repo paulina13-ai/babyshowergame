@@ -1,4 +1,4 @@
-# 🍼 Banch (B)irtual Baby Shower Pictionary
+# 🍼 Banchs (B)irtual Baby Shower Pictionary
 
 A silly, collaborative drawing game built for a baby shower video call. Everyone
 joins from their own phone/laptop with a room code (Jackbox-style) — one person
